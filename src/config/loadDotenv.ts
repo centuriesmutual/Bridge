@@ -6,9 +6,17 @@
  * imported by config/env.ts, so tests stay hermetic (they set process.env in
  * test/setup.ts and never read a developer's local .env).
  *
- * `dotenv` does not override variables that are already set, so real
- * environment configuration (e.g. in production/CI) always wins.
+ * In production (Railway / GitLab / etc.) env vars are injected by the
+ * platform — there is no `.env` file, so we skip dotenv entirely. A missing
+ * `.env` must never crash the process.
  */
 import { config } from 'dotenv';
 
-config();
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    // override: false so already-set vars (CI, shell) always win.
+    config({ path: '.env', override: false });
+  } catch {
+    // .env missing or unreadable — fine for local runs that set env another way.
+  }
+}
