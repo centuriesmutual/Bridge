@@ -9,22 +9,18 @@ import { z } from 'zod';
  */
 
 /**
- * Accept common boolean env spellings from platforms (Railway, etc.):
- * true/false, 1/0, yes/no — case-insensitive, trimmed.
+ * Coerce platform env values (always strings on Railway) into real booleans.
+ * Uses preprocess so the value is NEVER left as the string "false" (which is
+ * truthy in JS and would incorrectly require TLS certs).
  */
-const booleanish = z
-  .union([z.boolean(), z.string(), z.number()])
-  .transform((v, ctx) => {
-    if (typeof v === 'boolean') return v;
-    const raw = String(v).trim().toLowerCase();
-    if (['true', '1', 'yes', 'y', 'on'].includes(raw)) return true;
-    if (['false', '0', 'no', 'n', 'off', ''].includes(raw)) return false;
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Must be a boolean-ish value (true/false, 1/0, yes/no).',
-    });
-    return z.NEVER;
-  });
+const booleanish = z.preprocess((v) => {
+  if (typeof v === 'boolean') return v;
+  if (v === undefined || v === null) return undefined;
+  const raw = String(v).trim().toLowerCase();
+  if (['true', '1', 'yes', 'y', 'on'].includes(raw)) return true;
+  if (['false', '0', 'no', 'n', 'off', ''].includes(raw)) return false;
+  return v;
+}, z.boolean());
 
 const EnvSchema = z
   .object({
@@ -92,9 +88,9 @@ const EnvSchema = z
   })
   .superRefine((env, ctx) => {
     // Production may terminate TLS at the edge (Railway, ingress, etc.).
-    // Do NOT require TLS_ENABLED=true at the Node process. Only require cert
-    // paths when the app itself is configured to serve HTTPS.
-    if (env.TLS_ENABLED && (!env.TLS_CERT_PATH || !env.TLS_KEY_PATH)) {
+    // Compare with === true — never rely on truthiness of a string env value.
+    // TLS_ENABLED is coerced to a real boolean by booleanish preprocess above.
+    if (env.TLS_ENABLED === true && (!env.TLS_CERT_PATH || !env.TLS_KEY_PATH)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['TLS_CERT_PATH'],
