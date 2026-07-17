@@ -95,8 +95,9 @@ mock both, so no external services are needed to run the suite.
 
 ## Security
 
-- **TLS-only** (enforced in prod via env validation; terminate at ingress or
-  provide certs to `buildApp`).
+- **TLS at the edge** on Railway/PaaS (`TLS_ENABLED=false` is fine when the
+  platform terminates TLS). Set `TLS_ENABLED=true` + cert paths only if this
+  process serves HTTPS itself.
 - **Per-property origin allowlist** + member JWT; **least-privilege** chaincode
   access enforced in `src/fabric/contracts.ts` (a property cannot invoke
   another property's contract functions).

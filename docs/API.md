@@ -1,6 +1,7 @@
 # ledger-bridge API
 
-Base path: `/v1`. All responses are JSON. TLS-only in production.
+Base path: `/v1`. All responses are JSON. Prefer HTTPS at the edge
+(Railway / ingress); app-level TLS is optional via `TLS_ENABLED`.
 
 ## Authentication
 

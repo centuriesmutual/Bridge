@@ -8,9 +8,23 @@ import { z } from 'zod';
  * here but never logged (see src/lib/logger.ts redaction).
  */
 
+/**
+ * Accept common boolean env spellings from platforms (Railway, etc.):
+ * true/false, 1/0, yes/no — case-insensitive, trimmed.
+ */
 const booleanish = z
-  .enum(['true', 'false', '1', '0'])
-  .transform((v) => v === 'true' || v === '1');
+  .union([z.boolean(), z.string(), z.number()])
+  .transform((v, ctx) => {
+    if (typeof v === 'boolean') return v;
+    const raw = String(v).trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(raw)) return true;
+    if (['false', '0', 'no', 'n', 'off', ''].includes(raw)) return false;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Must be a boolean-ish value (true/false, 1/0, yes/no).',
+    });
+    return z.NEVER;
+  });
 
 const EnvSchema = z
   .object({
@@ -21,8 +35,9 @@ const EnvSchema = z
     HOST: z.string().default('0.0.0.0'),
     PORT: z.coerce.number().int().positive().default(8443),
 
-    // TLS
-    TLS_ENABLED: booleanish.default('false'),
+    // TLS at the Node process. On Railway / most PaaS, TLS terminates at the
+    // edge — leave TLS_ENABLED=false and do NOT require app-level certs.
+    TLS_ENABLED: booleanish.default(false),
     TLS_CERT_PATH: z.string().optional(),
     TLS_KEY_PATH: z.string().optional(),
 
@@ -76,15 +91,9 @@ const EnvSchema = z
     WEARABLE_AGGREGATOR_API_KEY: z.string().optional(),
   })
   .superRefine((env, ctx) => {
-    if (env.NODE_ENV === 'production') {
-      if (!env.TLS_ENABLED) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['TLS_ENABLED'],
-          message: 'TLS_ENABLED must be true in production (TLS-only service).',
-        });
-      }
-    }
+    // Production may terminate TLS at the edge (Railway, ingress, etc.).
+    // Do NOT require TLS_ENABLED=true at the Node process. Only require cert
+    // paths when the app itself is configured to serve HTTPS.
     if (env.TLS_ENABLED && (!env.TLS_CERT_PATH || !env.TLS_KEY_PATH)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
