@@ -48,6 +48,8 @@ export const CONTRACT_PERMISSIONS: Record<PropertyId, ReadonlySet<string>> = {
     'RewardsContract.GetHistory',
     'RewardsContract.CreditReward',
     'RewardsContract.RedeemReward',
+    'RewardsContract.GetWalletStatus',
+    'RewardsContract.ActivateWallet',
     'ConsentContract.GetConsent',
     'ConsentContract.SetConsent',
     'EnrollmentContract.GetEnrollment',
@@ -179,6 +181,30 @@ export class LedgerBridgeContracts {
   }
 
   // ---- RewardsContract (centuries-mutual, existing) ------------------------
+  //
+  // Wallet lifecycle: a member's Rewards Wallet starts INACTIVE and is
+  // activated by an admin (e.g. after ACA enrollment is confirmed). Balance
+  // reads/credits are only meaningful once active.
+  //
+  // TODO(centuries-chaincode): confirm RewardsContract exposes GetWalletStatus
+  // and ActivateWallet; if named differently, adjust the fn strings + the
+  // CONTRACT_PERMISSIONS entries above.
+  async getWalletStatus(memberId: string): Promise<WalletStatus> {
+    const raw = await this.evaluate('centuries-mutual', 'RewardsContract', 'GetWalletStatus', [
+      memberId,
+    ]);
+    return this.parse<WalletStatus>(raw);
+  }
+
+  async activateWallet(input: ActivateWalletInput): Promise<TxResult> {
+    const { txId } = await this.submit('centuries-mutual', 'RewardsContract', 'ActivateWallet', [
+      input.memberId,
+      input.activatedBy,
+      input.eventId,
+    ]);
+    return { txId, eventId: input.eventId };
+  }
+
   async getRewardsBalance(memberId: string): Promise<RewardsBalance> {
     const raw = await this.evaluate('centuries-mutual', 'RewardsContract', 'GetBalance', [
       memberId,
@@ -331,6 +357,22 @@ export interface RewardsBalance {
   memberId: string;
   balance: number;
   currency: 'CM_CREDIT';
+}
+
+export type WalletState = 'inactive' | 'active' | 'suspended';
+
+export interface WalletStatus {
+  memberId: string;
+  status: WalletState;
+  activatedAt?: string;
+  activatedBy?: string;
+}
+
+export interface ActivateWalletInput {
+  memberId: string;
+  /** Admin/actor id that authorized activation (for the audit record). */
+  activatedBy: string;
+  eventId: string;
 }
 
 export interface RewardsEntry {

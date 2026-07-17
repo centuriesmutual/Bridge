@@ -38,6 +38,8 @@ for it. A route attempting a function outside its property's set throws
 
 | Route | Method | Chaincode call | Auth |
 |---|---|---|---|
+| `/v1/centuries-mutual/rewards/wallet` | GET | `RewardsContract.GetWalletStatus` † | member (origin + Supabase JWT) |
+| `/v1/centuries-mutual/rewards/members/:memberId/activate` | POST | `RewardsContract.ActivateWallet` † | API key `rewards:admin` (idempotent) |
 | `/v1/centuries-mutual/rewards/balance` | GET | `RewardsContract.GetBalance` | member (origin + Supabase JWT) |
 | `/v1/centuries-mutual/rewards/history` | GET | `RewardsContract.GetHistory` | member |
 | `/v1/centuries-mutual/rewards/redeem` | POST | `RewardsContract.RedeemReward` | member (idempotent) |
@@ -49,6 +51,9 @@ for it. A route attempting a function outside its property's set throws
 | `/v1/centuries-mutual/enrollment/members/:memberId/milestone` | POST | `EnrollmentContract.RecordEnrollmentMilestone` | API key `enrollment:write` (idempotent) |
 | `/v1/centuries-mutual/wellness` | GET | `WellnessContract.GetWellnessStatus` | member |
 | `/v1/centuries-mutual/wellness/members/:memberId/activity` | POST | `WellnessContract.RecordWellnessActivity` | API key `wellness:write` (idempotent) |
+
+† `GetWalletStatus` / `ActivateWallet` are assumed additions to the existing
+`RewardsContract` — **confirm the function names in `centuries-chaincode`**.
 
 ### medicare-reviews (pending `SponsoredEngagementContract`)
 

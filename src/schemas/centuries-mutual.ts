@@ -23,6 +23,15 @@ export type RedeemRewardBody = z.infer<typeof RedeemRewardBody>;
 
 export const MemberIdParam = z.object({ memberId: MemberId });
 
+// ---- Wallet lifecycle ------------------------------------------------------
+// Admin activates a member's Rewards Wallet (e.g. after ACA enrollment).
+export const ActivateWalletBody = z.object({
+  // Admin/actor id that authorized activation (recorded on-ledger for audit).
+  activatedBy: z.string().min(1).max(128),
+  eventId: EventId,
+});
+export type ActivateWalletBody = z.infer<typeof ActivateWalletBody>;
+
 // ---- Consent ---------------------------------------------------------------
 export const ConsentScopeQuery = z.object({ scope: z.string().min(1).max(120) });
 

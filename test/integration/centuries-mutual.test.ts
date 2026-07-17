@@ -186,6 +186,17 @@ describe('centuries-mutual rewards (partner / api key)', () => {
     expect(res.json().error.code).toBe('DUPLICATE_REQUEST');
   });
 
+  it('returns 400 (not 500) for a malformed JSON body', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url,
+      headers: { 'x-api-key': TEST_API_KEY, 'content-type': 'application/json' },
+      payload: '{ not valid json',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('VALIDATION_FAILED');
+  });
+
   it('rejects a write with no idempotency key (400)', async () => {
     const res = await app.inject({
       method: 'POST',

@@ -5,7 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
 import { loadEnv } from './config/env.js';
 import { PROPERTY_CONFIG } from './config/origins.js';
-import { AppError } from './lib/errors.js';
+import { AppError, ValidationError } from './lib/errors.js';
 import { registerRoutes } from './routes/index.js';
 import './types/auth.js';
 
@@ -54,7 +54,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       try {
         done(null, JSON.parse(buf.toString('utf8')));
       } catch (err) {
-        done(err as Error, undefined);
+        // Malformed JSON is a client error (400), not a server error (500).
+        done(
+          new ValidationError('Request body is not valid JSON.', {
+            reason: err instanceof Error ? err.message : String(err),
+          }),
+          undefined,
+        );
       }
     },
   );

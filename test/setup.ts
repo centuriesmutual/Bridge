@@ -16,4 +16,4 @@ process.env.WEBHOOK_SECRET_USDC = 'test-usdc-secret';
 import { createHash } from 'node:crypto';
 export const TEST_API_KEY = 'test-key';
 const testKeyHash = createHash('sha256').update(TEST_API_KEY).digest('hex');
-process.env.API_KEYS = `partnerA:${testKeyHash}:rewards:read|rewards:write|wellness:write|enrollment:write`;
+process.env.API_KEYS = `partnerA:${testKeyHash}:rewards:read|rewards:write|rewards:admin|wellness:write|enrollment:write`;

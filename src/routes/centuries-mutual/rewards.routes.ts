@@ -7,11 +7,16 @@ import { getContracts } from '../../fabric/contracts.js';
 import { scopedMemberId } from '../../config/origins.js';
 import { parseOrThrow } from '../../schemas/common.js';
 import {
+  ActivateWalletBody,
   CreditRewardBody,
   MemberIdParam,
   RedeemRewardBody,
 } from '../../schemas/centuries-mutual.js';
-import type { CreditRewardBody as CreditBody, RedeemRewardBody as RedeemBody } from '../../schemas/centuries-mutual.js';
+import type {
+  ActivateWalletBody as ActivateBody,
+  CreditRewardBody as CreditBody,
+  RedeemRewardBody as RedeemBody,
+} from '../../schemas/centuries-mutual.js';
 
 /**
  * centuries-mutual/rewards — RewardsContract (existing chaincode).
@@ -24,6 +29,36 @@ import type { CreditRewardBody as CreditBody, RedeemRewardBody as RedeemBody } f
  */
 export async function rewardsRoutes(app: FastifyInstance): Promise<void> {
   const contracts = getContracts();
+
+  // ---- Member: own wallet status (inactive until admin activates) ----------
+  app.get(
+    '/wallet',
+    { preHandler: memberOriginAuth('centuries-mutual') },
+    async (req) => contracts.getWalletStatus(req.auth!.memberId!),
+  );
+
+  // ---- Admin: activate a member's wallet after ACA enrollment (idempotent) -
+  // Server-to-server call from the (future) admin page's backend.
+  app.post(
+    '/members/:memberId/activate',
+    {
+      preHandler: [
+        apiKeyScopes(['rewards:admin']),
+        idempotency('cm:rewards:activate', (req) => (req.body as ActivateBody)?.eventId),
+      ],
+    },
+    async (req, reply) => {
+      const { memberId: rawMemberId } = parseOrThrow(MemberIdParam, req.params);
+      const body = parseOrThrow(ActivateWalletBody, req.body);
+      await runIdempotent(req, reply, 200, () =>
+        contracts.activateWallet({
+          memberId: scopedMemberId('centuries-mutual', rawMemberId),
+          activatedBy: body.activatedBy,
+          eventId: body.eventId,
+        }),
+      );
+    },
+  );
 
   // ---- Member: own balance -------------------------------------------------
   app.get(

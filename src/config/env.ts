@@ -65,8 +65,10 @@ const EnvSchema = z
     // USDC settlement provider — CONFIRMED Circle Internet Group; swappable.
     // Do not hardcode real keys (provisioned in production).
     USDC_PROVIDER: z.enum(['circle', 'mock']).default('mock'),
-    USDC_PROVIDER_API_BASE: z.string().optional(),
+    USDC_PROVIDER_API_BASE: z.string().default('https://api-sandbox.circle.com'),
     USDC_PROVIDER_API_KEY: z.string().optional(),
+    // Circle wallet id holding USDC to disburse (source of transfers).
+    USDC_SOURCE_WALLET_ID: z.string().optional(),
     USDC_SETTLEMENT_CHAIN: z.string().default('base-sepolia'),
 
     // Wearable aggregator — TODO: confirm vendor.

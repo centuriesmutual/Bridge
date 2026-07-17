@@ -65,6 +65,27 @@ a completed duplicate replays the stored response with
 Rewards Wallet credits are an **internal ledger balance (`CM_CREDIT`)**, not
 crypto.
 
+### `GET /v1/centuries-mutual/rewards/wallet` (member)
+
+Returns the caller's Rewards Wallet status. Wallets start **`inactive`** and
+become **`active`** once an admin activates them (e.g. after ACA enrollment).
+
+```json
+{ "memberId": "cm:123", "status": "active", "activatedBy": "admin:jane", "activatedAt": "..." }
+```
+
+### `POST /v1/centuries-mutual/rewards/members/:memberId/activate` (API key `rewards:admin`, idempotent)
+
+Admin-only. Called by the admin page's backend to activate a member's wallet.
+
+```json
+{ "activatedBy": "admin:jane", "eventId": "act-1" }
+```
+
+> Depends on `RewardsContract.ActivateWallet` / `GetWalletStatus` —
+> **TODO: confirm** these exist in `centuries-chaincode` (function names may
+> differ).
+
 ### `GET /v1/centuries-mutual/rewards/balance` (member)
 
 Returns the caller's balance.

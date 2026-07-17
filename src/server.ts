@@ -1,3 +1,4 @@
+import './config/loadDotenv.js';
 import { readFileSync } from 'node:fs';
 import { buildApp } from './app.js';
 import { loadEnv } from './config/env.js';
