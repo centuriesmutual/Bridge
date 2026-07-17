@@ -1,93 +1,138 @@
-# Bridge
+# ledger-bridge
 
+**`ledger-bridge` is the single integration service** that sits between four
+Centuries Mutual-owned frontend properties and a Hyperledger Fabric network. It
+is the only repo that talks to all four properties.
 
+It receives requests/webhooks from the properties, authenticates and validates
+them, translates them into Fabric transactions or queries, calls out to any
+required third-party services (wearable aggregators, ad networks, USDC
+custody), and returns clean JSON.
+
+## What this repo is NOT
+
+- ❌ It does **not** implement business rules — those live in
+  **`centuries-chaincode`** (invoked here via the Fabric Gateway SDK only).
+- ❌ It does **not** implement Fabric network infrastructure (MSP/CA, channels,
+  peers/orderers) — that lives in **`centuries-ledger`**.
+- ❌ It contains **no frontend code**.
+- ❌ It never moves real USDC through Fabric — Fabric is **audit-only** for the
+  Wintergarden payout flow.
+
+## Properties served
+
+| Property | Reward mechanic |
+|---|---|
+| **centuriesmutual.com** | Insurance brokerage + Rewards Wallet — **internal credit** (`CM_CREDIT`), not crypto. Also a Carrier Portal and a public Developer Portal (OAuth 2.0 + API keys). |
+| **medicare.reviews** | Medicare plan comparison — **internal credit** "Sponsored Advertising Engagement Wallet" tied to ad-delivery events (opt-in). |
+| **wintergarden.cc / .software** | Music scoring — **real USDC** weekly payouts by rank to a connected external wallet (real custody/settlement) + non-transferable on-chain **merit badges** (score ≥ 75). |
+| **mybrotherskeeper.cc** | Fitness accountability — **internal points** "Walk-to-Earn" from wearable activity, redeemable at Bronze 500 / Silver 2,000 / Gold 5,000. |
+
+See [`docs/PROPERTY_BOUNDARIES.md`](docs/PROPERTY_BOUNDARIES.md) for the full
+route → chaincode mapping and [`docs/API.md`](docs/API.md) for endpoints.
+
+## ⛔ Pending chaincode work
+
+Three contracts do **not yet exist** in `centuries-chaincode`. The bridge is
+written against typed interfaces (`src/fabric/contracts.ts`) so it compiles and
+is testable now, and the affected endpoints return `501 NOT_IMPLEMENTED`
+(after still enforcing auth + webhook signature verification):
+
+- `SponsoredEngagementContract` (medicare-reviews)
+- `WintergardenContract` (wintergarden sessions, merit badges, USDC payouts)
+- `WalkToEarnContract` (mybrotherskeeper walk-to-earn + wearable webhook)
+
+> Track in `centuries-chaincode`:
+> `https://gitlab.com/centuries.mutual/centuries-chaincode/-/issues` _(TODO:
+> replace with real tracking issue links)._
+
+## Architecture: Fabric vs. public chain
+
+Fabric is a **permissioned ledger** — ideal for tamper-evident internal audit
+records. It **cannot custody or transfer real USDC**. For Wintergarden's USDC
+payouts:
+
+```
+session scored
+   → WintergardenContract.RecordMeritEvent()          [Fabric: pending audit record]
+   → USDCSettlementProvider.createPayout()             [public chain: real settlement]
+   → provider settlement webhook (status confirmed)    [publicChainTxHash known]
+   → WintergardenContract.SettleMeritPayout(id, hash)  [Fabric: mark settled, cross-ref]
+```
+
+Real settlement is behind the swappable `USDCSettlementProvider` interface
+(`src/services/usdc/`). The custody provider is **Circle Internet Group**
+(confirmed); the implementation is currently a **stub** pending production
+credentials — no real keys committed.
+
+## Tech stack
+
+TypeScript (Node 20+) · Fastify 5 · `@hyperledger/fabric-gateway` · Zod ·
+BullMQ + Redis · Vitest.
 
 ## Getting started
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/centuries.mutual/bridge.git
-git branch -M main
-git push -uf origin main
+```bash
+npm install
+cp .env.example .env      # fill in values; see "Open questions" below
+npm run dev               # API server (tsx watch)
+npm run worker            # BullMQ worker (separate process)
 ```
 
-## Integrate with your tools
+Quality gates:
 
-* [Set up project integrations](https://gitlab.com/centuries.mutual/bridge/-/settings/integrations)
+```bash
+npm run lint              # ESLint + tsc --noEmit
+npm run typecheck
+npm test                  # Vitest
+npm run test:coverage     # enforces 80% coverage
+npm run build             # tsc -> dist/
+```
 
-## Collaborate with your team
+Requires a running **Redis** for idempotency + queues (`REDIS_URL`) and, for
+live chaincode calls, a reachable **Fabric Gateway** peer (`FABRIC_*`). Tests
+mock both, so no external services are needed to run the suite.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## Security
 
-## Test and Deploy
+- **TLS-only** (enforced in prod via env validation; terminate at ingress or
+  provide certs to `buildApp`).
+- **Per-property origin allowlist** + member JWT; **least-privilege** chaincode
+  access enforced in `src/fabric/contracts.ts` (a property cannot invoke
+  another property's contract functions).
+- **Rate limiting** per API key / origin / IP (`@fastify/rate-limit`).
+- **Secret redaction**: Fabric certs/keys, webhook secrets, and USDC provider
+  keys are never logged.
+- **Webhook HMAC verification** over the raw body before any payload is trusted.
+- **Idempotency** on every write and webhook (Redis TTL keys).
 
-Use the built-in continuous integration in GitLab.
+## Open questions (flagged, not guessed)
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+These are stubbed behind interfaces / env placeholders with `TODO: confirm`
+markers. Pin them down before production:
 
-***
+1. **Supabase JWT** — actual project ref / issuer / JWKS URL / audience.
+2. **Wearable aggregator vendor** — Terra / Spike / Vital / … and its real
+   webhook payload shape (`src/services/wearables/aggregator.client.ts`).
+3. ✅ **USDC custody provider** — CONFIRMED **Circle Internet Group**
+   (`src/services/usdc/circle.provider.ts`). Real API wiring + credentials are
+   provisioned in production.
+4. **Shared vs. separate member identity** across properties — defaulted to
+   **property-scoped** IDs (`cm:`, `mr:`, `wg:`, `mbk:`).
 
-# Editing this README
+## Repo layout
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+```
+src/
+  config/       typed env + per-property origin allowlist
+  fabric/       gateway connection, identity loading, typed least-privilege contracts
+  services/     usdc (swappable provider), wearables aggregator, ad-network postbacks
+  middleware/   origin-auth, oauth, api-key, webhook-signature, idempotency
+  schemas/      Zod payload schemas per route group
+  routes/       four property namespaces under /v1
+  queue/        BullMQ queues, worker, jobs (wearable-sync, ad-postback)
+  app.ts        Fastify app builder (testable)
+  server.ts     entrypoint (TLS + listen + graceful shutdown)
+docs/           API.md, PROPERTY_BOUNDARIES.md
+test/           Vitest unit + integration suites
+```

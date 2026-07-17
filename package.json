@@ -1,0 +1,47 @@
+{
+  "name": "ledger-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Integration service bridging four Centuries Mutual properties to a Hyperledger Fabric network.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "worker": "tsx src/queue/worker.ts",
+    "lint": "eslint . --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/helmet": "^12.0.1",
+    "@fastify/rate-limit": "^10.1.1",
+    "@grpc/grpc-js": "^1.12.4",
+    "@hyperledger/fabric-gateway": "^1.7.0",
+    "bullmq": "^5.28.1",
+    "fastify": "^5.1.0",
+    "fastify-plugin": "^5.0.1",
+    "ioredis": "^5.4.1",
+    "jose": "^5.9.6",
+    "pino": "^9.5.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "@vitest/coverage-v8": "^2.1.5",
+    "eslint": "^8.57.1",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  }
+}
